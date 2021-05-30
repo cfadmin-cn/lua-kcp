@@ -13,12 +13,34 @@ typedef struct LUA_KCP{
 //   return 1;
 // }
 
-
 static int lcreate(lua_State *L) {
+  LUA_KCP *lua_kcp = (struct LUA_KCP *)lua_newuserdata(L, sizeof(struct LUA_KCP));
+  if (!lua_kcp)
+    return 0;
+  lua_kcp->ctx = ikcp_create(luaL_checkinteger(L, 1), lua_kcp);
+  lua_kcp->sender = lua_tothread(L, 2);
+  lua_kcp->reader = lua_tothread(L, 3);
+  lua_kcp->fd = -1;
+  luaL_setmetatable(L, "__KCP__");
   return 1;
 }
 
 static int lrelease(lua_State *L) {
+  LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
+  if (!lua_kcp)
+    return 0;
+  // 清除上下文资源
+  if (lua_kcp->ctx) {
+    ikcp_release(lua_kcp->ctx);
+    lua_kcp->ctx = NULL;
+  }
+  // 清除fd资源
+  if (lua_kcp->fd >= 0) {
+    close(lua_kcp->fd);
+    lua_kcp->fd = -1;
+  }
+  // 去除引用
+  lua_kcp->sender = lua_kcp->reader = NULL;
   return 1;
 }
 
@@ -45,9 +67,15 @@ static int lrecv(lua_State *L) {
 
 LUAMOD_API int luaopen_tcp(lua_State *L){
   luaL_checkversion(L);
-  luaL_newmetatable(L, "__TCP__");
+  // `hook`内存分配函数
+  ikcp_allocator(xmalloc, xfree);
+  // 创建`KCP`元对象;
+  luaL_newmetatable(L, "__KCP__");
   lua_pushstring (L, "__index");
   lua_pushvalue(L, -2);
+  lua_rawset(L, -3);
+  lua_pushstring (L, "__gc");
+  lua_pushcfunction(L, lrelease);
   lua_rawset(L, -3);
   lua_pushliteral(L, "__mode");
   lua_pushliteral(L, "kv");
