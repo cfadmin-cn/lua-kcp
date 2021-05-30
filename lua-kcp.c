@@ -12,9 +12,17 @@ typedef struct LUA_KCP{
   lua_State *reader, *sender;
 }LUA_KCP;
 
-// static int udp_output(const char *buf, int len, ikcpcb *kcp, void *user) {
-//   return 1;
-// }
+
+// 当前时间戳
+static inline int64_t current_timestamp() {
+  struct timeval ts;
+  gettimeofday(&ts, NULL);
+  return (int64_t)(ts.tv_sec * 1e3 + (int32_t)(ts.tv_usec * 1e-3));
+}
+
+static int lua_udp_output(const char *buf, int len, ikcpcb *kcp, void *user) {
+  return 1;
+}
 
 static inline void SETSOCKETOPT(int sockfd) {
 	int Enable = 1;
@@ -151,7 +159,7 @@ static int lrecv(lua_State *L) {
 
 static int lconnect(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
-  if (!lua_kcp)
+  if (!lua_kcp || !lua_kcp->ctx)
     return 0;
 
   // 创建`udp`文件描述符
@@ -167,7 +175,7 @@ static int lconnect(lua_State *L) {
 
 static int llisten(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
-  if (!lua_kcp)
+  if (!lua_kcp || !lua_kcp->ctx)
     return 0;
 
   // 创建`udp`文件描述符
@@ -181,15 +189,38 @@ static int llisten(lua_State *L) {
   return 1;
 }
 
+// 检查下次调用所需时间
+static int lcheck(lua_State *L){
+  LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
+  if (!lua_kcp || !lua_kcp->ctx)
+    return luaL_error(L, "[KCP ERROR]: %s", "Invalid ctx or ikcp ptr in `ikcp_check`.");
+  lua_pushinteger(L, ikcp_check(lua_kcp->ctx, current_timestamp()));
+  return 1;
+}
+
+// 刷新缓冲区所有数据
+static int lupdate(lua_State *L){
+  LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
+  if (!lua_kcp || !lua_kcp->ctx)
+    return luaL_error(L, "[KCP ERROR]: %s", "Invalid ctx or ikcp ptr in `ikcp_update`.");
+  ikcp_update(lua_kcp->ctx, current_timestamp());
+  return 1;
+}
+
 // 创建对象
 static int lcreate(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)lua_newuserdata(L, sizeof(struct LUA_KCP));
   if (!lua_kcp)
     return 0;
   lua_kcp->ctx = ikcp_create(luaL_checkinteger(L, 1), lua_kcp);
+  // 设置最小`rto`
+  lua_kcp->ctx->rx_minrto = 10;
+  // 设置读/写回调
   lua_kcp->sender = lua_tothread(L, 2);
   lua_kcp->reader = lua_tothread(L, 3);
   lua_kcp->fd = -1;
+  // 设置输出接口;
+  ikcp_setoutput(lua_kcp->ctx, lua_udp_output);
   luaL_setmetatable(L, "__KCP__");
   return 1;
 }
@@ -238,6 +269,8 @@ LUAMOD_API int luaopen_tcp(lua_State *L){
     {"setmode", lsetmode},
     {"connect", lconnect},
     {"listen", llisten},
+    {"check", lcheck},
+    {"update", lupdate},
     {"release", lrelease},
     {NULL, NULL},
   };
