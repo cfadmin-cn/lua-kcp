@@ -15,10 +15,10 @@ end)
 
 local k2 = lua_kcp:new { conv = 1, ip = "localhost", port = 8082 }
 print("2.开始")
-print("2.接收1:", k2:recv(12))
-print("2.接收2:", k2:recv(12))
-print("2.接收3:", k2:recv(12))
-print("2.接收4:", k2:recv(12))
+print("2.接收1:", k2:recv())
+print("2.接收2:", k2:recv())
+print("2.接收3:", k2:recv())
+print("2.接收4:", k2:recv())
 print("2.结束", k2:getsnd())
 
 cf.wait()
