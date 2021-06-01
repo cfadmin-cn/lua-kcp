@@ -49,11 +49,11 @@
 
   `kcp:send(buffer) return boolean end`
 
-  使用此方法将会向对端发送`buffer`内所包含的字符串.
+  使用此方法将会向对端发送的字符串.
 
   `kcp:recv() return buffer end`
 
-  使用此方法将会接收对端发送过来的`buffer`内所包含的字符串.
+  使用此方法会接收对端发送的字符串.
 
 ### 3. 获取、修改属性
 
@@ -61,15 +61,15 @@
 
   `kcp:setmtu(mtu) return nil end`
 
-  设置最大传输单元.
+  设置`KCP`最大传输单元.
 
   `kcp:setwnd(mtu) return nil end`
 
-  设置滑动窗口大小.
+  设置`KCP`滑动窗口大小(包).
 
   `kcp:setmode(mode) return nil end`
 
-  设置传输模式: fast(快速), normal(普通).
+  设置`mode`传输模式: `fast`(快速), `normal`(普通).
 
   `kcp:getsnd() return integer end`
 
