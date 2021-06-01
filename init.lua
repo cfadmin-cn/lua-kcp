@@ -131,7 +131,7 @@ end
 function KCP:setmode(mode)
   if type(mode) == 'string' and lower(mode) == "fast" then
     self.nodelay, self.interval, self.resend, self.nc = 1, mrandom(10, 15), 2, 1
-  else
+  elseif type(mode) == 'string' and lower(mode) == "normal" then
     self.nodelay, self.interval, self.resend, self.nc = 0, 40, 0, 0
   end
   return self
