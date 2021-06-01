@@ -15,4 +15,4 @@ CFLAGS = -Wall -O3 -fPIC --shared -Wl,-rpath,. -Wl,-rpath,.. -Wl,-rpath,/usr/loc
 # 构建lkcp.so依赖库
 build:
 	@$(CC) -o lkcp.so lua-kcp.c ikcp.c $(CFLAGS) $(INCLUDES) $(LIBS) -lcore -lev
-	@cp *.so *.lua ../
+	@mv *.so ../
