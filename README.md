@@ -30,7 +30,7 @@
 ### 1. 创建对象
   ---
 
-  `lkcp:new(opt) return kcp end`
+  函数原型: `lkcp:new(opt) return kcp end`
 
   使用`lkcp:new(opt)`创建一个`kcp`实例对象, 这个对象可用于后续的所有操作.
 
@@ -47,11 +47,11 @@
 
   ---
 
-  `kcp:send(buffer) return boolean end`
+  函数原型: `kcp:send(buffer) return boolean end`
 
   使用此方法将会向对端发送的字符串.
 
-  `kcp:recv() return buffer end`
+  函数原型: `kcp:recv() return buffer end`
 
   使用此方法会接收对端发送的字符串.
 
@@ -59,19 +59,19 @@
 
   ---
 
-  `kcp:setmtu(mtu) return nil end`
+  函数原型: `kcp:setmtu(mtu) return nil end`
 
   设置`KCP`最大传输单元.
 
-  `kcp:setwnd(mtu) return nil end`
+  函数原型: `kcp:setwnd(mtu) return nil end`
 
   设置`KCP`滑动窗口大小(包).
 
-  `kcp:setmode(mode) return nil end`
+  函数原型: `kcp:setmode(mode) return nil end`
 
   设置`mode`传输模式: `fast`(快速), `normal`(普通).
 
-  `kcp:getsnd() return integer end`
+  函数原型: `kcp:getsnd() return integer end`
 
   返回kcp待发送的数据包数量.
 
@@ -80,7 +80,7 @@
 
   ---
 
-  `kcp:close() return nil end`
+  函数原型: `kcp:close() return nil end`
 
   释放资源.
 
