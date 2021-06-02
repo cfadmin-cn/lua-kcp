@@ -160,27 +160,29 @@ static inline int NEWSOCKET(void) {
   return usocket;
 }
 
-// 输出
+// 接收写入事件
 static int lua_kcp_output(const char *buffer, int bsize, ikcpcb *kcp, void *user) {
   errno = 0;
 
   LUA_KCP *lua_kcp = (LUA_KCP *)user;
-  if (!lua_kcp || !lua_kcp->ctx || lua_kcp->fd < 0 || !buffer || bsize <= 0 )
+  if (!lua_kcp || !lua_kcp->ctx || lua_kcp->fd < 0)
     return 0;
-  
+
   int wsize = write(lua_kcp->fd, buffer, bsize);
   if (wsize < 0)
     LOG("ERROR", strerror(errno));
-    // printf("[(%d) ERROR]: %s\n", lua_kcp->fd, strerror(errno));
 
-  lua_pushinteger(lua_kcp->sender, wsize);
-  // lua_pushinteger(lua_kcp->sender, write(lua_kcp->fd, buffer, bsize));
-  int status = CO_RESUME(lua_kcp->sender, NULL, lua_status(lua_kcp->sender) == LUA_YIELD ? lua_gettop(lua_kcp->sender) : lua_gettop(lua_kcp->sender) - 1);
-  if (status != LUA_YIELD && status != LUA_OK) {
-    LOG("ERROR", lua_tostring(lua_kcp->sender, -1));
-    LOG("ERROR", "Error lua_kcp_output Method");
+  // 需要开启写入回调才会触发, 但是频繁的切换会对性能造成影响.
+  if (lua_kcp->sender) {
+    lua_pushinteger(lua_kcp->sender, wsize);
+    int status = CO_RESUME(lua_kcp->sender, NULL, lua_status(lua_kcp->sender) == LUA_YIELD ? lua_gettop(lua_kcp->sender) : lua_gettop(lua_kcp->sender) - 1);
+    if (status != LUA_YIELD && status != LUA_OK) {
+      LOG("ERROR", lua_tostring(lua_kcp->sender, -1));
+      LOG("ERROR", "Error lua_kcp_output Method");
+    }
   }
-  return 1;
+
+  return wsize;
 }
 
 // 监听可读事件
