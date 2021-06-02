@@ -59,6 +59,10 @@
 
   ---
 
+  函数原型: `kcp:setstream() return nil end`
+
+  设置`KCP`为流模式(默认为包模式), 需要客户端设置才有效.
+
   函数原型: `kcp:setmtu(mtu) return nil end`
 
   设置`KCP`最大传输单元.
@@ -73,7 +77,7 @@
 
   函数原型: `kcp:getsnd() return integer end`
 
-  返回kcp待发送的数据包数量.
+  返回`KCP`待发送的数据包数量.
 
 
 ### 4. 关闭
