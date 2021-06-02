@@ -16,10 +16,12 @@ typedef struct LUA_KCP{
 }LUA_KCP;
 
 // 当前时间戳
-static inline int64_t current_timestamp() {
+static inline uint32_t current_timestamp() {
   struct timeval ts;
   gettimeofday(&ts, NULL);
-  return (int64_t)(ts.tv_sec * 1e3 + (int32_t)(ts.tv_usec * 1e-3));
+  int64_t s =  ts.tv_sec * 1e3;
+  int64_t u =  ts.tv_usec * 1e-3;
+  return (uint32_t)((s + u) & 0xFFFFFFFF);
 }
 
 static inline void SETSOCKETOPT(int sockfd) {
@@ -396,6 +398,16 @@ static int lsetmtu(lua_State *L) {
   return 0;
 }
 
+// 设置为流模式
+static int lsetstream(lua_State *L) {
+  LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
+  if (!lua_kcp || !lua_kcp->ctx)
+    return luaL_error(L, "[KCP ERROR]: %s", "Invalid ctx or ikcp ptr in `ikcp_stream`.");
+
+  lua_kcp->ctx->stream = 1;
+  return 0;
+}
+
 static int lgetsnd(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
   if (!lua_kcp || !lua_kcp->ctx)
@@ -477,6 +489,7 @@ LUAMOD_API int luaopen_lkcp(lua_State *L){
     {"setwnd", lsetwnd},
     {"setmtu", lsetmtu},
     {"setmode", lsetmode},
+    {"setstream", lsetstream},
     {"connect", lconnect},
     {"listen", llisten},
     {"check", lcheck},

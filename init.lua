@@ -7,6 +7,7 @@ local lkcp_update = lkcp.update
 local lkcp_setwnd = lkcp.setwnd
 local lkcp_setmtu = lkcp.setmtu
 local lkcp_setmode = lkcp.setmode
+local lkcp_setstream = lkcp.setstream
 
 local dns = require "protocol.dns"
 local dns_resolve = dns.resolve
@@ -91,12 +92,9 @@ function KCP:ctor(opt)
   self.mtu, self.wnd, self.nodelay, self.interval, self.resend, self.nc = 1400, 128, 0, 40, 0, 0
   self.ip = assert(type(opt.ip) == 'string' and opt.ip, "[KCP ERROR]: Invalid IP.")
   self.port = assert(toint(opt.port), "[KCP ERROR]: Invalid port.")
-  self.sender = co_create(function (size)
-    while true do
-      -- print("sender", size)
-      size = co_yield()
-    end
-  end)
+end
+
+function KCP:new_reader()
   self.reader = co_create(function (size)
     while true do
       -- print("reader", size)
@@ -109,6 +107,24 @@ function KCP:ctor(opt)
       size = co_yield()
     end
   end)
+  return self
+end
+
+function KCP:new_sender()
+  self.sender = co_create(function (size)
+    while true do
+      -- print("sender", size)
+      if self.closed then
+        return
+      end
+      size = co_yield()
+    end
+  end)
+  return self
+end
+
+function KCP:setstream()
+  self.stream = true
 end
 
 ---comment 设置KCP的最大传输单元
@@ -140,11 +156,18 @@ end
 -- 初始化初始化对象
 function KCP:init(ip, port)
   self.ip, self.port = ip, port
+  self:new_reader()
+  -- self:new_sender()
   self.kcp = lkcp:new(self.conv, self.sender, self.reader)
   lkcp_setmtu(self.kcp, self.mtu); lkcp_setwnd(self.kcp, self.wnd)
   lkcp_setmode(self.kcp, self.nodelay, self.interval, self.resend, self.nc)
+  -- 客户端、与服务器是否初始化
   if not self.__MODE__ then
     self:dispatch()
+  end
+  -- 流模式
+  if self.stream then
+    lkcp_setstream(self.kcp)
   end
   return self.kcp
 end
