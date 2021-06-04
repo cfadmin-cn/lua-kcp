@@ -25,6 +25,7 @@ local co_self = co.running
 local co_create = co.create
 local co_yield = co.yield
 
+local type = type
 local next = next
 local pairs = pairs
 local assert = assert
@@ -36,46 +37,43 @@ local class = require "class"
 
 local Timer = {}
 
----comment 检查定时器内的所有对象
----@param interval integer   @`Timer`的时间
----@param map table          @`Timer`的时间
-Timer['check'] = function (self, interval, map)
-  if not next(map) then
-    self['t' .. interval] = nil
-    return false
-  end
-  return true
-end
-
 ---comment 分散定时器的复杂度到不同的`Timer`.
 ---@param self table         @`Timer`
 ---@param interval integer   @`Timer`的时间
 ---@param kcp userdata       @`KCP`对象
 Timer['dispatch'] = function (self, interval, kcp)
   -- print("开启定时器: ", interval)
-  return cf.fork(function ()
-    local map = assert(self['t' .. interval], "[KCP ERROR]: Invalid Timer Map.")
+  cf.fork(function ()
+    local index = 't' .. interval
+    local map = assert(self[index], "[KCP ERROR]: Invalid Timer Map.")
     while true do
       for _, obj in pairs(map) do
         lkcp_update(obj)
       end
+      -- 让去执行权给到其它协程.
       cf_sleep(interval * 1e-3)
       -- 如果表内已经没有任何对象, 那么销毁定时器节省资源.
-      if not Timer:check(interval, map) then
+      if not next(map) then
+        self[index] = nil
         return
       end
     end
   end)
+  return
 end
 
 ---comment 创建定时器
-for _, timeout in ipairs({10, 11, 12, 13, 14, 15, 40}) do
-  Timer[timeout] = function (self, kcp)
-    if not self['t' .. timeout] then
-      self['t' .. timeout] = new_tab(0, 128)
+for _, interval in ipairs({10, 11, 12, 13, 14, 15, 40}) do
+  Timer[interval] = function (self, kcp)
+    local index = 't' .. interval
+    local tab = self[index]
+    if tab then
+      tab[kcp] = kcp
+      return
     end
-    self['t' .. timeout][kcp] = kcp
-    return Timer:dispatch(timeout, kcp)
+    self[index] = new_tab(0, 128)
+    self[index][kcp] = kcp
+    return Timer:dispatch(interval, kcp)
   end
 end
 
