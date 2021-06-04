@@ -144,13 +144,21 @@ cf.wait()
 
 </details>
 
+## 抓包调试
+
+  * 下载[wireshark](https://www.wireshark.org/download.html), 然后进行安装.
+
+  * 按照[这里](https://github.com/CandyMi/kcp_dissector)的指引安装我们编写的`插件`, 如果您使用的不是`8082`端口请修改为此端口.
+
+  * 最后在`wireshark`的`filter`上输入`kcp`后按回车, 然后运行应用程序就能看到捕获的数据包了.
+
 ## 许可
 
   [MIT](https://github.com/CandyMi/lua-kcp/blob/master/LICENSE)
 
 ## 最后
 
-  * 大、小包发送方法一致, 数据按包分割.
+  * 大、小包发送方法一致, 默认情况下按照包分割. 可以自行修改.
 
   * `conv`必须为`uint32`类型, 同时客户端与服务器必须一致.
 
