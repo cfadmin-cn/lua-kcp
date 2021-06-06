@@ -234,20 +234,18 @@ static void lua_kcp_accept(core_loop *loop, core_io *w, int revents) {
     // memset(&addr, 0x0, sizeof(addr));
     socklen_t asize = sizeof(addr);
     int rsize = recvfrom(lua_kcp->fd, buffer, KCP_BUFFER_SIZE, 0, (struct sockaddr *)&addr, (socklen_t*)&asize);
-    if (rsize <= 0 || lua_kcp->ctx->conv != ikcp_getconv(buffer))
+    if (rsize <= 0 || lua_kcp->ctx->conv != ikcp_getconv(buffer) || ikcp_input(lua_kcp->ctx, buffer, rsize) < 0)
       return; // 这里需要丢弃任何不符合KCP数据包规范与未认证的客户端数据包
 
     // 调试代码
     // char str[INET6_ADDRSTRLEN];
     // printf("数据: [%s]! 来自 IP:[%s], PORT:[%d], AF: [%d]\n", buffer, inet_ntop(addr.sin6_family, &addr.sin6_addr, str, INET6_ADDRSTRLEN), addr.sin6_port, addr.sin6_family);
 
-    int ret = connect(lua_kcp->fd, (struct sockaddr *)&addr, (socklen_t)sizeof(addr));
-    if (ret < 0)
+    // 绑定客户端IP地址
+    if (connect(lua_kcp->fd, (struct sockaddr *)&addr, (socklen_t)sizeof(addr)) < 0)
       LOG("ERROR", strerror(errno));
 
-    // 将输入、输出响应传递到kcp内部.
-    if (ikcp_input(lua_kcp->ctx, buffer, rsize) < 0)
-      return;
+    // 让ikcp决定是否响应ACK
     ikcp_update(lua_kcp->ctx, current_timestamp());
 
     // 传递数据长度到内部
