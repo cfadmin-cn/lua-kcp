@@ -194,7 +194,7 @@ function KCP:send(buffer)
   end
   self:dispatch()
   -- 让出逻辑执行权的时候, 可以让框架有执行其它逻辑的机会.
-  return lkcp_send(self.kcp, buffer), cf_sleep(0)
+  return lkcp_send(self.kcp, buffer)
 end
 
 ---comment 接收对端发送的数据
