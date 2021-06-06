@@ -4,6 +4,7 @@ local lkcp_send = lkcp.send
 local lkcp_recv = lkcp.recv
 local lkcp_peek = lkcp.recv
 local lkcp_update = lkcp.update
+local lkcp_getsnd = lkcp.getsnd
 local lkcp_setwnd = lkcp.setwnd
 local lkcp_setmtu = lkcp.setmtu
 local lkcp_setmode = lkcp.setmode
@@ -16,6 +17,7 @@ local sys = require "sys"
 local new_tab = sys.new_tab
 
 local cf = require "cf"
+local cf_fork = cf.fork
 local cf_wait = cf.wait
 local cf_wakeup = cf.wakeup
 local cf_sleep = cf.sleep
@@ -43,29 +45,34 @@ local Timer = {}
 ---@param kcp userdata       @`KCP`对象
 Timer['dispatch'] = function (self, interval, kcp)
   -- print("开启定时器: ", interval)
-  cf.fork(function ()
+  return cf_fork(function ()
     local index = 't' .. interval
     local map = assert(self[index], "[KCP ERROR]: Invalid Timer Map.")
     while true do
+      local count = 0
       for _, obj in pairs(map) do
-        lkcp_update(obj)
+        if lkcp_getsnd(obj) <= 0 then
+          map[obj] = nil
+        else
+          lkcp_update(obj)
+          count = count + 1
+        end
       end
       -- 让去执行权给到其它协程.
       cf_sleep(interval * 1e-3)
-      -- 如果表内已经没有任何对象, 那么销毁定时器节省资源.
-      if not next(map) then
+      -- 如果表内已经没有任何对象, 那就应该销毁定时器节省资源.
+      if count == 0 then
         self[index] = nil
         return
       end
     end
   end)
-  return
 end
 
 ---comment 创建定时器
 for _, interval in ipairs({10, 11, 12, 13, 14, 15, 40}) do
+  local index = 't' .. interval
   Timer[interval] = function (self, kcp)
-    local index = 't' .. interval
     local tab = self[index]
     if tab then
       tab[kcp] = kcp
@@ -73,13 +80,17 @@ for _, interval in ipairs({10, 11, 12, 13, 14, 15, 40}) do
     end
     self[index] = new_tab(0, 128)
     self[index][kcp] = kcp
-    return Timer:dispatch(interval, kcp)
+    Timer:dispatch(interval, kcp)
+    return
   end
 end
 
 ---comment 移除定时器
 Timer.remove = function (self, interval, kcp)
-  self['t' .. interval][kcp] = nil
+  local map = self['t' .. interval]
+  if map then
+    map[kcp] = nil
+  end
 end
 
 local KCP = class("KCP")
@@ -154,15 +165,10 @@ end
 -- 初始化初始化对象
 function KCP:init(ip, port)
   self.ip, self.port = ip, port
-  self:new_reader()
-  -- self:new_sender()
+  self:new_reader(); -- self:new_sender();
   self.kcp = lkcp:new(self.conv, self.sender, self.reader)
   lkcp_setmtu(self.kcp, self.mtu); lkcp_setwnd(self.kcp, self.wnd)
   lkcp_setmode(self.kcp, self.nodelay, self.interval, self.resend, self.nc)
-  -- 客户端、与服务器是否初始化
-  if not self.__MODE__ then
-    self:dispatch()
-  end
   -- 流模式
   if self.stream then
     lkcp_setstream(self.kcp)
@@ -186,7 +192,9 @@ function KCP:send(buffer)
     self:init(self.ip, self.port):connect(self.ip, self.port)
     self.__MODE__ = "CLIENT"
   end
-  return lkcp_send(self.kcp, buffer)
+  self:dispatch()
+  -- 让出逻辑执行权的时候, 可以让框架有执行其它逻辑的机会.
+  return lkcp_send(self.kcp, buffer), cf_sleep(0)
 end
 
 ---comment 接收对端发送的数据
@@ -196,8 +204,10 @@ function KCP:recv()
     self:init(self.ip, self.port):listen(self.ip, self.port)
     self.__MODE__ = "SERVER"
   end
+  self:dispatch()
   local co = co_self()
-  self.read_co = cf.fork(function ()
+  self.read_co = cf_fork(function ()
+    -- 检查读buffer是否有数据, 没有数据将等待数据到来.
     while lkcp_peek(self.kcp, 1, true) < 0 do
       if not cf_wait() or self.closed then
         self.read_co = nil
@@ -205,14 +215,34 @@ function KCP:recv()
       end
     end
     self.read_co = nil
+    -- 如果有数据就读取出来, 但是要保证每次读数据的时候一定有足够的buffer.
     return cf_wakeup(co, lkcp_recv(self.kcp, lkcp_peek(self.kcp, 1, true)))
   end)
   return cf_wait()
 end
 
-
+-- 获取发送缓冲区参与大小
 function KCP:getsnd()
   return assert(self.kcp, "[KCP ERROR]: `KCP` has not been initialized."):getsnd()
+end
+
+-- 当前有多少的活跃连接.
+function KCP:count()
+  local COUNTER = {}
+  for interval = 10, 15 do
+    local count = 0
+    local index = 't' .. interval
+    for _, _ in pairs(Timer[index] or {}) do
+      count = count + 1
+    end
+    COUNTER[index] = count
+  end
+  local count = 0
+  for _, _ in pairs(Timer['t' .. '40'] or {}) do
+    count = count + 1
+  end
+  COUNTER['t' .. '40'] = count
+  return COUNTER
 end
 
 -- 销毁资源

@@ -190,7 +190,7 @@ static int lua_kcp_output(const char *buffer, int bsize, ikcpcb *kcp, void *user
 // 监听可读事件
 static void lua_kcp_reader(core_loop *loop, core_io *w, int revents) {
   if (revents == EV_READ) {
-        errno = 0;
+    errno = 0;
     LUA_KCP *lua_kcp = (LUA_KCP *)core_get_watcher_userdata(w);
     char buffer[KCP_BUFFER_SIZE];
     while (1) {
@@ -201,12 +201,16 @@ static void lua_kcp_reader(core_loop *loop, core_io *w, int revents) {
         if (errno == EWOULDBLOCK || !rsize)
           return;
         // TODO: 出错处理?
+        LOG("ERROR", strerror(errno));
       }
-      /* 验证客户端. */
+      // 验证客户端.
       if (lua_kcp->ctx->conv == ikcp_getconv(buffer)) {
-        /* 将输入、输出响应传递到kcp内部. */
-        ikcp_input(lua_kcp->ctx, buffer, rsize);
+        // 将输入、输出响应传递到kcp内部.
+        if (ikcp_input(lua_kcp->ctx, buffer, rsize) < 0)
+          return;
         ikcp_update(lua_kcp->ctx, current_timestamp());
+
+        // 传递数据长度到内部
         lua_pushinteger(lua_kcp->reader, rsize);
         int status = CO_RESUME(lua_kcp->reader, NULL, lua_status(lua_kcp->reader) == LUA_YIELD ? lua_gettop(lua_kcp->reader) : lua_gettop(lua_kcp->reader) - 1);
         if (status != LUA_YIELD && status != LUA_OK) {
@@ -242,7 +246,8 @@ static void lua_kcp_accept(core_loop *loop, core_io *w, int revents) {
       LOG("ERROR", strerror(errno));
 
     // 将输入、输出响应传递到kcp内部.
-    ikcp_input(lua_kcp->ctx, buffer, rsize);
+    if (ikcp_input(lua_kcp->ctx, buffer, rsize) < 0)
+      return;
     ikcp_update(lua_kcp->ctx, current_timestamp());
 
     // 传递数据长度到内部
@@ -305,7 +310,7 @@ static int lrecv(lua_State *L) {
   if (rsize <= 0)
     return 0;
 
-  ikcp_update(lua_kcp->ctx, current_timestamp());
+  // ikcp_update(lua_kcp->ctx, current_timestamp());
   lua_pushlstring(L, buffer, rsize);
   return 1;
 }
