@@ -34,7 +34,7 @@ local lower = string.lower
 local mrandom = math.random
 local toint = math.tointeger
 
-local MAX_RETRIES = 5
+local MAX_RETRIES = 15
 
 local Timer = {}
 
