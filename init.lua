@@ -28,14 +28,13 @@ local co_create = co.create
 local co_yield = co.yield
 
 local type = type
-local next = next
 local pairs = pairs
 local assert = assert
 local lower = string.lower
 local mrandom = math.random
 local toint = math.tointeger
 
-local class = require "class"
+local MAX_RETRIES = 5
 
 local Timer = {}
 
@@ -50,12 +49,21 @@ Timer['dispatch'] = function (self, interval, kcp)
     local map = assert(self[index], "[KCP ERROR]: Invalid Timer Map.")
     while true do
       local count = 0
-      for _, obj in pairs(map) do
-        if lkcp_getsnd(obj) <= 0 then
-          map[obj] = nil
+      for obj, cnt in pairs(map) do
+        lkcp_update(obj)
+        count = count + 1
+        -- 如果已经没有数据了, 那么就进入到
+        if lkcp_getsnd(obj) < 1 then
+          map[obj] = cnt - 1
         else
-          lkcp_update(obj)
-          count = count + 1
+          if MAX_RETRIES > cnt then
+            map[obj] = MAX_RETRIES
+          end
+        end
+        -- 超出多少个时钟后如果还是没数据, 就暂时放弃主动刷新数据。
+        if cnt < 1 then
+          map[obj] = nil
+          count = count - 1
         end
       end
       -- 让去执行权给到其它协程.
@@ -75,11 +83,11 @@ for _, interval in ipairs({10, 11, 12, 13, 14, 15, 40}) do
   Timer[interval] = function (self, kcp)
     local tab = self[index]
     if tab then
-      tab[kcp] = kcp
+      tab[kcp] = MAX_RETRIES
       return
     end
     self[index] = new_tab(0, 128)
-    self[index][kcp] = kcp
+    self[index][kcp] = MAX_RETRIES
     Timer:dispatch(interval, kcp)
     return
   end
@@ -92,6 +100,8 @@ Timer.remove = function (self, interval, kcp)
     map[kcp] = nil
   end
 end
+
+local class = require "class"
 
 local KCP = class("KCP")
 
