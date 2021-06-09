@@ -120,7 +120,7 @@ function KCP:new_reader()
       if self.closed then
         return
       end
-      if self.read_co then
+      if self.read_co and lkcp_peek(self.kcp, 1, true) > 0 then
         cf_wakeup(self.read_co, size)
       end
       size = co_yield()
@@ -215,6 +215,10 @@ function KCP:recv()
     self.__MODE__ = "SERVER"
   end
   self:dispatch()
+  local rsize = lkcp_peek(self.kcp, 1, true)
+  if rsize > 0 then
+    return lkcp_recv(self.kcp, rsize)
+  end
   local co = co_self()
   self.read_co = cf_fork(function ()
     -- 检查读buffer是否有数据, 没有数据将等待数据到来.
