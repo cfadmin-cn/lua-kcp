@@ -121,7 +121,8 @@ function KCP:new_reader()
         return
       end
       if self.read_co and lkcp_peek(self.kcp, 1, true) > 0 then
-        cf_wakeup(self.read_co, size)
+        cf_wakeup(self.read_co, lkcp_recv(self.kcp, lkcp_peek(self.kcp, 1, true)))
+        self.read_co = nil
       end
       size = co_yield()
     end
@@ -219,19 +220,7 @@ function KCP:recv()
   if rsize > 0 then
     return lkcp_recv(self.kcp, rsize)
   end
-  local co = co_self()
-  self.read_co = cf_fork(function ()
-    -- 检查读buffer是否有数据, 没有数据将等待数据到来.
-    while lkcp_peek(self.kcp, 1, true) < 0 do
-      if not cf_wait() or self.closed then
-        self.read_co = nil
-        return cf_wakeup(co)
-      end
-    end
-    self.read_co = nil
-    -- 如果有数据就读取出来, 但是要保证每次读数据的时候一定有足够的buffer.
-    return cf_wakeup(co, lkcp_recv(self.kcp, lkcp_peek(self.kcp, 1, true)))
-  end)
+  self.read_co = co_self()
   return cf_wait()
 end
 
