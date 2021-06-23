@@ -199,24 +199,24 @@ static void lua_kcp_reader(core_loop *loop, core_io *w, int revents) {
         if (errno == EINTR)
           continue;
         if (errno == EWOULDBLOCK || !rsize)
-          return;
+          break;
         // TODO: 出错处理?
         LOG("ERROR", strerror(errno));
       }
       // 验证客户端.
       if (lua_kcp->ctx->conv == ikcp_getconv(buffer)) {
         // 将输入、输出响应传递到kcp内部.
-        if (ikcp_input(lua_kcp->ctx, buffer, rsize) < 0)
-          return;
+        ikcp_input(lua_kcp->ctx, buffer, rsize);
+        // 如果接收到`请求`或`响应`内部, 则需要调用ACK回应对端.
         ikcp_update(lua_kcp->ctx, current_timestamp());
-
-        // 传递数据长度到内部
-        lua_pushinteger(lua_kcp->reader, rsize);
-        int status = CO_RESUME(lua_kcp->reader, NULL, lua_status(lua_kcp->reader) == LUA_YIELD ? lua_gettop(lua_kcp->reader) : lua_gettop(lua_kcp->reader) - 1);
-        if (status != LUA_YIELD && status != LUA_OK) {
-          LOG("ERROR", lua_tostring(lua_kcp->reader, -1));
-          LOG("ERROR", "Error Lua Reader Method");
-        }
+      }
+    }
+    // 需要开启读入回调才会触发
+    if (lua_kcp->reader) {
+      int status = CO_RESUME(lua_kcp->reader, NULL, lua_status(lua_kcp->reader) == LUA_YIELD ? lua_gettop(lua_kcp->reader) : lua_gettop(lua_kcp->reader) - 1);
+      if (status != LUA_YIELD && status != LUA_OK) {
+        LOG("ERROR", lua_tostring(lua_kcp->reader, -1));
+        LOG("ERROR", "Error Lua Reader Method");
       }
     }
   }
@@ -267,15 +267,15 @@ static void lua_kcp_accept(core_loop *loop, core_io *w, int revents) {
 static int lsend(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
   if (!lua_kcp || !lua_kcp->ctx)
-    return luaL_error(L, "[KCP ERROR]: Invali KCP send context.");
+    return luaL_error(L, "[KCP ERROR]: Invalid KCP send context.");
 
   size_t bsize;
   const char *buffer = (const char *)luaL_checklstring(L, 2, &bsize);
   if (!buffer || bsize < 1)
-    return 0;
+    return luaL_error(L, "[KCP ERROR]: Invalid KCP send buffer.");
 
   if (ikcp_send(lua_kcp->ctx, buffer, bsize))
-    return 0;
+    return luaL_error(L, "[KCP ERROR]: Invalid KCP send result.");
 
   ikcp_update(lua_kcp->ctx, current_timestamp());
   lua_pushboolean(L, 1);
@@ -285,11 +285,11 @@ static int lsend(lua_State *L) {
 static int lrecv(lua_State *L) {
   LUA_KCP *lua_kcp = (struct LUA_KCP *)luaL_checkudata(L, 1, "__KCP__");
   if (!lua_kcp || !lua_kcp->ctx)
-    return luaL_error(L, "[KCP ERROR]: Invali KCP recv context.");
+    return luaL_error(L, "[KCP ERROR]: Invalid KCP recv context.");
 
   lua_Integer bsize = luaL_checkinteger(L, 2);
   if (bsize < 1)
-    return luaL_error(L, "[KCP ERROR]: Invali KCP recv bsize %d.", bsize);
+    return luaL_error(L, "[KCP ERROR]: Invalid KCP recv bsize %d.", bsize);
 
   // 如果需要`peek`, 则可以使用第三个变量控制行为.
   if (lua_isboolean(L, 3) && lua_toboolean(L, 3) == 1) {
