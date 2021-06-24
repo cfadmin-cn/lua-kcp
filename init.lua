@@ -116,7 +116,7 @@ end
 function KCP:new_reader()
   self.reader = co_create(function (size)
     while true do
-      print("reader", size)
+      -- print("reader", size)
       if not size then
         return self:close()
       end
