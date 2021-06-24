@@ -162,6 +162,22 @@ static inline int NEWSOCKET(void) {
   return usocket;
 }
 
+// 统一Lua事件回调方法, 用于传递对端事件.(可选使用)
+static inline void lua_event_callback(lua_State *L, int *size) {
+  // 如果没有注册回调则直接返回
+  if (!L)
+    return;
+  // 如果有size则写入size;
+  if (size)
+    lua_pushinteger(L, *size);
+  // 执行回调
+  int status = CO_RESUME(L, NULL, lua_status(L) == LUA_YIELD ? lua_gettop(L) : lua_gettop(L) - 1);
+  if (status != LUA_YIELD && status != LUA_OK) {
+    LOG("ERROR", lua_tostring(L, -1));
+    LOG("ERROR", "Error lua_kcp_output Method");
+  }
+}
+
 // 接收写入事件
 static int lua_kcp_output(const char *buffer, int bsize, ikcpcb *kcp, void *user) {
   errno = 0;
@@ -175,14 +191,7 @@ static int lua_kcp_output(const char *buffer, int bsize, ikcpcb *kcp, void *user
     LOG("ERROR", strerror(errno));
 
   // 需要开启写入回调才会触发, 但是频繁的切换会对性能造成影响.
-  if (lua_kcp->sender) {
-    lua_pushinteger(lua_kcp->sender, wsize);
-    int status = CO_RESUME(lua_kcp->sender, NULL, lua_status(lua_kcp->sender) == LUA_YIELD ? lua_gettop(lua_kcp->sender) : lua_gettop(lua_kcp->sender) - 1);
-    if (status != LUA_YIELD && status != LUA_OK) {
-      LOG("ERROR", lua_tostring(lua_kcp->sender, -1));
-      LOG("ERROR", "Error lua_kcp_output Method");
-    }
-  }
+  lua_event_callback(lua_kcp->sender, &wsize);
 
   return wsize;
 }
@@ -190,17 +199,20 @@ static int lua_kcp_output(const char *buffer, int bsize, ikcpcb *kcp, void *user
 // 监听可读事件
 static void lua_kcp_reader(core_loop *loop, core_io *w, int revents) {
   if (revents == EV_READ) {
-    errno = 0;
     LUA_KCP *lua_kcp = (LUA_KCP *)core_get_watcher_userdata(w);
     char buffer[KCP_BUFFER_SIZE];
+    int rsize = 0;
     while (1) {
-      int rsize = read(w->fd, buffer, KCP_BUFFER_SIZE);
+      errno = 0;
+      rsize = read(w->fd, buffer, KCP_BUFFER_SIZE);
       if (rsize <= 0) {
         if (errno == EINTR)
           continue;
         if (errno == EWOULDBLOCK || !rsize)
           break;
-        // TODO: 出错处理?
+        if (errno == ECONNREFUSED)
+          return lua_event_callback(lua_kcp->reader, NULL);
+
         LOG("ERROR", strerror(errno));
       }
       // 验证客户端.
@@ -212,13 +224,7 @@ static void lua_kcp_reader(core_loop *loop, core_io *w, int revents) {
       }
     }
     // 需要开启读入回调才会触发
-    if (lua_kcp->reader) {
-      int status = CO_RESUME(lua_kcp->reader, NULL, lua_status(lua_kcp->reader) == LUA_YIELD ? lua_gettop(lua_kcp->reader) : lua_gettop(lua_kcp->reader) - 1);
-      if (status != LUA_YIELD && status != LUA_OK) {
-        LOG("ERROR", lua_tostring(lua_kcp->reader, -1));
-        LOG("ERROR", "Error Lua Reader Method");
-      }
-    }
+    lua_event_callback(lua_kcp->reader, &rsize);
   }
 }
 

@@ -116,7 +116,10 @@ end
 function KCP:new_reader()
   self.reader = co_create(function (size)
     while true do
-      -- print("reader", size)
+      print("reader", size)
+      if not size then
+        return self:close()
+      end
       if self.closed then
         return
       end
@@ -203,6 +206,7 @@ function KCP:send(buffer)
     self:init(self.ip, self.port):connect(self.ip, self.port)
     self.__MODE__ = "CLIENT"
   end
+  assert(not self.closed, "[KCP ERROR]: called reader when peer closed.")
   self:dispatch()
   -- 让出逻辑执行权的时候, 可以让框架有执行其它逻辑的机会.
   return lkcp_send(self.kcp, buffer)
@@ -215,6 +219,7 @@ function KCP:recv()
     self:init(self.ip, self.port):listen(self.ip, self.port)
     self.__MODE__ = "SERVER"
   end
+  assert(not self.closed, "[KCP ERROR]: called sender when peer closed.")
   self:dispatch()
   local rsize = lkcp_peek(self.kcp, 1, true)
   if rsize > 0 then
